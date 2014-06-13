@@ -1,0 +1,149 @@
+#!/usr/bin/perl
+
+#TODO: Run scanning as an "open" in order to continue updating window
+#TODO: Add instructions about adding a udev entry to allow access to the scanner without sudo.
+
+use Tk;
+#use Tk:DialogBox;
+
+$main = MainWindow->new();
+#$main->Label(-text => 'HP4600 Scanner')->pack;
+
+$button_holder = $main -> Frame(); #New Frame
+$button_holder -> grid(-row=>1,-column=>1);
+
+$scanbutton = $button_holder->Button(-text => 'Scan',-command => \&scanimg);
+#                   ->pack;
+$scanbutton -> grid(-row=>1,-column=>1);
+
+
+$exitbutton = $button_holder->Button(-text => 'Exit',
+              -command => sub {
+                  $main->destroy;
+              });
+#        ->pack;
+$exitbutton -> grid(-row=>2,-column=>1);
+
+
+$status_holder = $main -> Frame(); #New Frame
+$status_holder -> grid(-row=>1,-column=>2);
+$status_label = $status_holder -> Label(-text=>"Status:");
+$status_label -> grid(-row=>1,-column=>1);
+$status = $status_holder -> Entry(-state=>readonly, -textvariable=>\$statusline, -width=>50);
+$status -> grid(-row=>1,-column=>2);
+#$status_label -> grid(-row=>1,-column=>1);
+#$status -> grid(-row=>1,-column=>2);
+
+#$status_holder -> grid(-row=>1,-column=>2);
+
+
+$busyind = $main -> Entry(-state=>readonly, -textvariable=>\$busydots,-width=>5);
+$busyind -> grid(-row=>1,-column=>3);
+
+#$status -> insert(0,"Ready.");
+$statusline = "Ready.";
+#$ent -> delete(0,'end');
+
+$n = 0;
+#$busy = 1;
+
+MainLoop();  # never returns
+
+while (1) {
+	if($busy){
+		print $n," ";
+		if($n == 3){
+			$busydots = "";		
+			$n = 0;
+		} else {
+			$n++;
+			$busydots .= ".";
+		}
+	} else {
+		#$busyind -> insert(0,"   ");
+		$busydots = "";		
+		$n = 0;
+	}
+	$main->update;
+	select(undef,undef,undef,0.50); # sleep half second
+}
+
+
+
+
+
+
+$filename = $ARGV[0];
+sub scanimg{
+
+	my $filename = $main->getSaveFile( #-types => ('.bmp'),
+		-initialfile=> 'Default',
+		-defaultextension => '.bmp');
+	if(!$filename){
+		return;
+	}
+	print $filename,"\n";
+
+	#push update to window
+
+	if($filename !~ /\.bmp$/){
+		$filename .= ".bmp";
+	}
+	#if(-e $filename){
+	#	$main->Label(-text => 'File '.$filename.' already exists.')->pack;
+	#	die "Output file already exists!\n";
+	#}
+	$tempfile = time();
+	$tempfile = $filename.$tempfile;
+	if(-e $tempfile){
+		die "Temp file already exists!\n";
+	}
+	$loginname = getpwuid($<);
+	$0 =~ /(.*\/).*?/;
+	$scriptpath = $1;
+	
+	#$main->Label(-text => "( ".$scriptpath." )")->pack;
+	#$status -> delete(0,'end');
+	$statusline = 'Scanning to '.$tempfile.'...';
+
+	#$main->Label(-text => 'Scanning to '.$tempfile.'...')->pack;
+	$main->update;
+	select(undef,undef,undef,0.50); # sleep half second
+	$busy = 1;
+	$error = system('gksudo '.$scriptpath.'hp4600scanfullfile '.$tempfile.' >/dev/null 2>/dev/null');
+	$busy = 0;
+	#$main->Label(-text => $error)->pack;
+	if($error){
+		$statusline = 'Scan died! Error '.$error;
+		die "Scan died! (Error $error)\n";
+	}
+	$error = system('gksudo chown '.$loginname." ".$tempfile);
+	if($error){
+		$statusline = 'Error chown-ing temp file! Error '.$error;
+		die;
+	}
+
+	$statusline = 'Fixing file...';
+	if(-e $filename){
+		$statusline = 'Removing old file...';
+		$error = system("rm -f $filename");
+		if($error){
+			$statusline = 'Error overwriting '.$filename;
+			die "Can'r remove old file! (Error $error)\n";
+		}
+	}
+	#$main->Label(-text => "( ".$scriptpath.'fixhp4600output '.$tempfile." > ".$filename." )")->pack;
+	$error = system($scriptpath.'fixhp4600output '.$tempfile." > ".$filename);
+	if($error && $error != 65280){
+		$statusline = 'Error fixing scan file! Error '.$error;
+		die "Error fixing file! (Error $error)\n";
+	}
+	$statusline = 'Deleting temp file...';
+	$error = system('rm -f '.$tempfile);
+	if($error){
+		die "Error erasing tempfile! (Error $error)\n";
+	}
+	#$error = system('bash -c "chmod 640 '.$filename.'"');
+	#update main to confirm scan
+	$statusline = 'Scanned image to '.$filename;
+}
