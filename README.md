@@ -14,12 +14,12 @@ The image corrector is required because the scanning elements on the scanner hea
 Good luck.
 
 ###Dependencies:
-Compiling the binaries requires libusb-devel.
+Compiling the binaries requires _legacy_ libusb-devel (~v0.1.4).
 The one-step script uses Perl/Tk.
 
 ###Compiling:
 
 ```
-gcc hp4600-scanfullpage11.c -o hp4600scanfullfile -lusb
+gcc hp4600-scanfullpage.c -o hp4600scanfullfile -lusb
 gcc -o fixhp4600output fixhp4600output.c
 ```
